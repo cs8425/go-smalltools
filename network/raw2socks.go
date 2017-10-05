@@ -4,8 +4,7 @@ package main
 
 import (
 	"io"
-	"os"
-	"fmt"
+	"flag"
 	"log"
 	"net"
 	"strconv"
@@ -14,11 +13,11 @@ import (
 	"runtime"
 )
 
-var LISTEN string  // listen address, e.g. 0.0.0.0:1080
-var SOCKS_SERVER string  // socks5_server address, e.g. 123.123.123.123:1080
-var TARGET string  // target address, e.g. www.google.com:80
+var verbosity = flag.Int("v", 3, "verbosity")
 
-var verbosity int = 3
+var localAddr = flag.String("l", ":9999", "bind addr")
+var socksAddr = flag.String("s", "example.com:1080", "socks5 server addr")
+var targetAddr = flag.String("t", "192.168.1.1:80", "target addr")
 
 // global recycle buffer
 var copyBuf sync.Pool
@@ -28,9 +27,9 @@ var socksReq []byte
 func handleConnection(p1 net.Conn) {
 	defer p1.Close()
 
-	p2, err := net.DialTimeout("tcp", SOCKS_SERVER, 5*time.Second)
+	p2, err := net.DialTimeout("tcp", *socksAddr, 5*time.Second)
 	if err != nil {
-		Vlogln(2, "connect to ", SOCKS_SERVER, err)
+		Vln(2, "connect to ", *socksAddr, err)
 		return
 	}
 
@@ -51,11 +50,11 @@ func handleConnection(p1 net.Conn) {
 	// read reply
 	n, err := p2.Read(b[:10])
 	if n < 10 {
-		Vlogln(2, "Dial err replay:", SOCKS_SERVER, n)
+		Vln(2, "Dial err replay:", *socksAddr, n)
 		return
 	}
 	if err != nil || b[1] != 0x00 {
-		Vlogln(2, "Dial err:", SOCKS_SERVER, n, b[1], err)
+		Vln(2, "Dial err:", *socksAddr, n, b[1], err)
 		return
 	}
 
@@ -92,27 +91,26 @@ func cp(p1, p2 io.ReadWriteCloser) {
 
 
 func main() {
-    if len(os.Args) < 4 {
-        fmt.Println("Usage: raw2socks5 LISTEN SOCKS_SERVER TARGET")
-        return
-    }
+	log.SetFlags(log.Ldate|log.Ltime)
+	flag.Parse()
+	runtime.GOMAXPROCS(runtime.NumCPU() + 2)
 
-    LISTEN = os.Args[1]
-	SOCKS_SERVER =  os.Args[2]
-	TARGET =  os.Args[3]
+	copyBuf.New = func() interface{} {
+		return make([]byte, 4096)
+	}
 
-	host, portStr, err := net.SplitHostPort(TARGET)
+	host, portStr, err := net.SplitHostPort(*targetAddr)
 	if err != nil {
-		Vlogln(2, "SplitHostPort err:", TARGET, err)
+		Vln(2, "SplitHostPort err:", *targetAddr, err)
 		return
 	}
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
-		Vlogln(2, "failed to parse port number:", portStr, err)
+		Vln(2, "failed to parse port number:", portStr, err)
 		return
 	}
 	if port < 1 || port > 0xffff {
-		Vlogln(2, "port number out of range:", portStr, err)
+		Vln(2, "port number out of range:", portStr, err)
 		return
 	}
 
@@ -121,16 +119,12 @@ func main() {
 	socksReq = append(socksReq, host...)
 	socksReq = append(socksReq, byte(port>>8), byte(port))
 
-	runtime.GOMAXPROCS(runtime.NumCPU() + 2)
-	copyBuf.New = func() interface{} {
-		return make([]byte, 4096)
-	}
 
-	listener, err := net.Listen("tcp", LISTEN)
+	listener, err := net.Listen("tcp", *localAddr)
 	if err != nil {
 		log.Fatal("Listen error: ", err)
 	}
-	log.Printf("Listening on %s...\n", LISTEN)
+	log.Printf("Listening on %s...\n", *localAddr)
 
 
 	for {
@@ -143,18 +137,18 @@ func main() {
 	}
 }
 
-func Vlogf(level int, format string, v ...interface{}) {
-	if level <= verbosity {
+func Vf(level int, format string, v ...interface{}) {
+	if level <= *verbosity {
 		log.Printf(format, v...)
 	}
 }
-func Vlog(level int, v ...interface{}) {
-	if level <= verbosity {
+func V(level int, v ...interface{}) {
+	if level <= *verbosity {
 		log.Print(v...)
 	}
 }
-func Vlogln(level int, v ...interface{}) {
-	if level <= verbosity {
+func Vln(level int, v ...interface{}) {
+	if level <= *verbosity {
 		log.Println(v...)
 	}
 }
