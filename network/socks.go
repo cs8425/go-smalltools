@@ -13,11 +13,12 @@ import (
 	"sync"
 	"time"
 	"runtime"
+	"flag"
 )
 
-var LISTEN string  // listen address, e.g. 0.0.0.0:1080
+var localAddr = flag.String("l", ":1080", "bind address")
 
-var verbosity int = 3
+var verbosity = flag.Int("v", 3, "verbosity")
 
 // global recycle buffer
 var copyBuf sync.Pool
@@ -32,7 +33,7 @@ func handleConnection(p1 net.Conn) {
 	var b [1024]byte
 	n, err := p1.Read(b[:])
 	if err != nil {
-		Vlogln(3, "client read", p1, err)
+		Vln(3, "client read", p1, err)
 		p1.Close()
 		return
 	}
@@ -66,38 +67,21 @@ func handleConnection(p1 net.Conn) {
 	backend := net.JoinHostPort(host, port)
 	p2, err := net.DialTimeout("tcp", backend, 5*time.Second)
 	if err != nil {
-		Vlogln(2, backend, err)
+		Vln(2, backend, err)
 		replyAndClose(p1, 0x05) // X'05'
 		return
 	}
 
-	/*if config.RWBuf > 0 {
-		if err := p2.(*net.TCPConn).SetReadBuffer(config.RWBuf); err != nil {
-			Vlogln(3, "TCP SetReadBuffer:", err)
-		}
-		if err := p2.(*net.TCPConn).SetWriteBuffer(config.RWBuf); err != nil {
-			Vlogln(3, "TCP SetWriteBuffer:", err)
-		}
-	}*/
-
 	reply := []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-	/*addr := p2.RemoteAddr()
-	portI := addr.(*net.TCPAddr).Port
-	ipv4 := addr.(*net.TCPAddr).IP.To4()
-	if ipv4 != nil {
-		copy(reply[4:], ipv4)
-		reply[8] = byte(portI / 256)
-		reply[9] = byte(portI & 0xFF)
-	}*/
-	Vlogln(3, "socks to:", backend)
+	Vln(3, "socks to:", backend)
 	p1.Write(reply) // reply OK
 
 	go handleClient(p1, p2)
 }
 
 func handleClient(p1, p2 io.ReadWriteCloser) {
-//	Vlogln(2, "stream opened")
-//	defer Vlogln(2, "stream closed")
+//	Vln(2, "stream opened")
+//	defer Vln(2, "stream closed")
 	defer p1.Close()
 	defer p2.Close()
 
@@ -149,29 +133,45 @@ func ListenAndServe() {
 }
 
 func main() {
-    if len(os.Args) < 2 {
-        fmt.Println("Usage: socks5 LISTEN")
-        return
-    }
+	log.SetFlags(log.Ldate|log.Ltime)
+	flag.Parse()
+	runtime.GOMAXPROCS(runtime.NumCPU() + 2)
 
-    LISTEN = os.Args[1]
+	copyBuf.New = func() interface{} {
+		return make([]byte, 16384)
+	}
 
-    ListenAndServe()
+	listener, err := net.Listen("tcp", LISTEN)
+	if err != nil {
+		log.Fatal("Listen error: ", err)
+	}
+	log.Printf("Listening on %s...\n", LISTEN)
+
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Println("Accept error:", err)
+			continue
+		}
+		go handleConnection(conn)
+	}
 }
 
-func Vlogf(level int, format string, v ...interface{}) {
-	if level <= verbosity {
+func Vf(level int, format string, v ...interface{}) {
+	if level <= *verbosity {
 		log.Printf(format, v...)
 	}
 }
-func Vlog(level int, v ...interface{}) {
-	if level <= verbosity {
+func V(level int, v ...interface{}) {
+	if level <= *verbosity {
 		log.Print(v...)
 	}
 }
-func Vlogln(level int, v ...interface{}) {
-	if level <= verbosity {
+func Vln(level int, v ...interface{}) {
+	if level <= *verbosity {
 		log.Println(v...)
 	}
 }
+
 
