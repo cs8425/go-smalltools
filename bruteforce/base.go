@@ -65,14 +65,13 @@ func main() {
 		select {
 		case <-end:
 			goto WAIT_END
-		default:
-			ch <- tmp
-		}
-//		ch <- tmp
-		if increment(input) {
-			start++
-			input = make([]byte, start)
-			Vln(2, "go next!", start)
+		case ch <- tmp:
+			if increment(input) {
+				start++
+				input = make([]byte, start)
+				Vln(2, "go next!", start)
+			}
+		//default:
 		}
 	}
 
