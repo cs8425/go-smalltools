@@ -7,15 +7,16 @@ import (
 	"log"
 	"net"
 	"net/url"
-	"os"
 	"runtime"
 	"strings"
 	"sync"
+	"flag"
 )
 
-var LISTEN string  // listen address, e.g. 0.0.0.0:8081
-
-var verbosity int = 3
+var (
+	verbosity = 3
+	port = flag.String("l", ":4040", "bind port")
+)
 
 // global recycle buffer
 var copyBuf sync.Pool
@@ -23,23 +24,16 @@ var copyBuf sync.Pool
 func main() {
 	log.SetFlags(log.LstdFlags|log.Lshortfile)
 
-    if len(os.Args) < 2 {
-        fmt.Println("Usage: httpproxy LISTEN")
-        return
-    }
-
-    LISTEN = os.Args[1]
-
 	runtime.GOMAXPROCS(runtime.NumCPU() + 2)
 	copyBuf.New = func() interface{} {
 		return make([]byte, 16384)
 	}
 
-	listener, err := net.Listen("tcp", LISTEN)
+	listener, err := net.Listen("tcp", *port)
 	if err != nil {
 		log.Fatal("Listen error: ", err)
 	}
-	log.Printf("Listening on %s...\n", LISTEN)
+	log.Printf("Listening on %s...\n", *port)
 
 
 	for {
