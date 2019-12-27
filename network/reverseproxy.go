@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 	"flag"
 	"log"
 )
@@ -56,7 +57,12 @@ func main() {
 	http.Handle("/", proxy)
 
 	// start http server
-	srv := &http.Server{Addr: *port, Handler: nil}
+	srv := &http.Server{
+		ReadTimeout: 5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		Addr: *port,
+		Handler: nil,
+	}
 	startServer(srv)
 }
 

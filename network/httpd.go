@@ -4,7 +4,9 @@ import (
 	"compress/gzip"
 	"net/http"
 	"io/ioutil"
+	"path"
 	"strings"
+	"time"
 	"flag"
 	"log"
 )
@@ -33,7 +35,7 @@ func wiki(next http.Handler) http.Handler {
 	allowFp := make(map[string]string)
 	urls := strings.Split(*file, ";")
 	for _, s := range urls {
-		parts := strings.SplitAfterN(s, ":", 2)
+		parts := strings.SplitN(s, ":", 2)
 		if len(parts) > 1 {
 			allowFp[parts[0]] = parts[1]
 		}
@@ -53,6 +55,7 @@ func wiki(next http.Handler) http.Handler {
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
 			}
+			fp = path.Join(*dir, fp)
 
 			b, err := ioutil.ReadAll(r.Body)
 			if err != nil {
@@ -76,7 +79,13 @@ func wiki(next http.Handler) http.Handler {
 func main() {
 	flag.Parse()
 	http.Handle("/", reqlog(wiki(http.FileServer(http.Dir(*dir)))))
-	err := http.ListenAndServe(*port, nil)
+	srv := &http.Server{
+		ReadTimeout: 5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		Addr: *port,
+		Handler: nil,
+	}
+	err := srv.ListenAndServe()
 	if err != nil {
 		Vln(0, err)
 	}
