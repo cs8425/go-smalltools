@@ -2,6 +2,7 @@ package main
 
 import (
 	"compress/gzip"
+	"crypto/tls"
 	"net/http"
 	"io/ioutil"
 	"path"
@@ -9,6 +10,9 @@ import (
 	"time"
 	"flag"
 	"log"
+	"context"
+	"os"
+	"os/signal"
 )
 
 var (
@@ -19,6 +23,9 @@ var (
 	verbosity = flag.Int("v", 3, "verbosity")
 	port = flag.String("l", ":4040", "bind port")
 	dir = flag.String("d", "./www", "bind dir")
+
+	crtFile = flag.String("crt", "", "https certificate file")
+	keyFile = flag.String("key", "", "https private key file")
 )
 
 func reqlog(next http.Handler) http.Handler {
@@ -76,8 +83,49 @@ func wiki(next http.Handler) http.Handler {
 	})
 }
 
+type userlist map[string]string // user -> pass
+type AuthDir map[string]*userlist // path -> user list
+
+func basicAuth(w http.ResponseWriter, r *http.Request, h http.Handler, list *userlist) {
+	userReq, passReq, _ := r.BasicAuth()
+	/*if !ok {
+		http.Error(w, "BadRequest", http.StatusBadRequest)
+		return
+	}*/
+
+	pass, ok := (map[string]string)(*list)[userReq]
+	if !ok || pass != passReq {
+		w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	h.ServeHTTP(w, r)
+}
+
+func basicAuthDir(h http.Handler, authInfo *AuthDir) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		dirList := (map[string]*userlist)(*authInfo)
+		for p, list := range dirList {
+			if strings.HasPrefix(r.URL.Path, p) {
+				basicAuth(w, r, h, list)
+				return
+			}
+		}
+//		Vln(3, "HttpAuth Path:", r.URL.Path, ok, list)
+		h.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	flag.Parse()
+/*
+	if config.HttpAuth != nil {
+		Vln(2, "HttpAuth:", config.HttpAuth)
+		fileHandler = basicAuthDir(fileHandler, config.HttpAuth)
+	}
+*/
+
 	http.Handle("/", reqlog(wiki(http.FileServer(http.Dir(*dir)))))
 	srv := &http.Server{
 		ReadTimeout: 5 * time.Second,
@@ -85,9 +133,68 @@ func main() {
 		Addr: *port,
 		Handler: nil,
 	}
-	err := srv.ListenAndServe()
-	if err != nil {
-		Vln(0, err)
+
+	idleConnsClosed := make(chan struct{})
+	go func() {
+		sigint := make(chan os.Signal, 1)
+		signal.Notify(sigint, os.Interrupt)
+		<-sigint
+
+		// We received an interrupt signal, shut down.
+		if err := srv.Shutdown(context.Background()); err != nil {
+			// Error from closing listeners, or context timeout:
+			log.Printf("HTTP server Shutdown: %v", err)
+		}
+		close(idleConnsClosed)
+	}()
+
+	startServer(srv, *crtFile, *keyFile)
+
+	<-idleConnsClosed
+}
+
+func startServer(srv *http.Server, crt string, key string) {
+	var err error
+
+	// check tls
+	if crt != "" && key != "" {
+		cfg := &tls.Config{
+			MinVersion:               tls.VersionTLS12,
+			CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
+			PreferServerCipherSuites: true,
+			CipherSuites: []uint16{
+
+				tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+
+				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, // http/2 must
+				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, // http/2 must
+
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
+				tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
+
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+
+				tls.TLS_RSA_WITH_AES_256_GCM_SHA384, // weak
+				tls.TLS_RSA_WITH_AES_256_CBC_SHA, // waek
+			},
+		}
+		srv.TLSConfig = cfg
+		//srv.TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0) // disable http/2
+
+		log.Printf("[server] HTTPS server Listen on: %v", srv.Addr)
+		err = srv.ListenAndServeTLS(crt, key)
+	} else {
+		log.Printf("[server] HTTP server Listen on: %v", srv.Addr)
+		err = srv.ListenAndServe()
+	}
+
+	if err != http.ErrServerClosed {
+		log.Printf("[server] ListenAndServe error: %v", err)
 	}
 }
 
