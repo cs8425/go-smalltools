@@ -33,8 +33,12 @@ func reqlog(next http.Handler) http.Handler {
 		Vln(3, r.Method, r.URL, r.RemoteAddr, r.Host)
 		w.Header().Add("Service-Worker-Allowed", "/")
 		gzw := TryGzipResponse(w, r)
-		defer gzw.Close()
-		next.ServeHTTP(gzw, r)
+		if gzw != nil {
+			defer gzw.Close()
+			next.ServeHTTP(gzw, r)
+		} else {
+			next.ServeHTTP(w, r)
+		}
 	})
 }
 
@@ -77,6 +81,8 @@ func wiki(next http.Handler) http.Handler {
 				return
 			}
 			return
+		case "GET":
+			w.Header().Set("Cache-Control", "public, no-cache, max-age=0, must-revalidate")
 		default:
 		}
 		next.ServeHTTP(w, r)
@@ -246,7 +252,7 @@ func CanAcceptsGzip(r *http.Request) (bool) {
 
 func TryGzipResponse(w http.ResponseWriter, r *http.Request) (*GzipResponseWriter) {
 	if !CanAcceptsGzip(r) || *gzipLv == 0 {
-		return &GzipResponseWriter{w, nil}
+		return nil
 	}
 
 	gw, err := gzip.NewWriterLevel(w, *gzipLv)
