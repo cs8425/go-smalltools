@@ -20,6 +20,9 @@ var (
 
 	file = flag.String("f", "/:index.html;/index.html:index.html", "allow put file")
 
+	readTimeout = flag.Int("rt", 5, "http ReadTimeout (Second)")
+	writeTimeout = flag.Int("wt", 20, "http WriteTimeout (Second)")
+
 	verbosity = flag.Int("v", 3, "verbosity")
 	port = flag.String("l", ":4040", "bind port")
 	dir = flag.String("d", "./www", "bind dir")
@@ -134,8 +137,8 @@ func main() {
 
 	http.Handle("/", reqlog(wiki(http.FileServer(http.Dir(*dir)))))
 	srv := &http.Server{
-		ReadTimeout: 5 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		ReadTimeout: time.Duration(*readTimeout) * time.Second,
+		WriteTimeout: time.Duration(*writeTimeout) * time.Second,
 		Addr: *port,
 		Handler: nil,
 	}
