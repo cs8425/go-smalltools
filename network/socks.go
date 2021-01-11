@@ -5,8 +5,8 @@ package main
 
 import (
 	"io"
-	"os"
-	"fmt"
+//	"os"
+//	"fmt"
 	"log"
 	"net"
 	"strconv"
@@ -16,9 +16,11 @@ import (
 	"flag"
 )
 
-var localAddr = flag.String("l", ":1080", "bind address")
+var (
+	localAddr = flag.String("l", ":1080", "bind address")
 
-var verbosity = flag.Int("v", 3, "verbosity")
+	verbosity = flag.Int("v", 3, "verbosity")
+)
 
 // global recycle buffer
 var copyBuf sync.Pool
@@ -109,29 +111,6 @@ func handleClient(p1, p2 io.ReadWriteCloser) {
 	}
 }
 
-func ListenAndServe() {
-	runtime.GOMAXPROCS(runtime.NumCPU() + 2)
-	copyBuf.New = func() interface{} {
-		return make([]byte, 16384)
-	}
-
-	listener, err := net.Listen("tcp", LISTEN)
-	if err != nil {
-		log.Fatal("Listen error: ", err)
-	}
-	log.Printf("Listening on %s...\n", LISTEN)
-
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Println("Accept error:", err)
-			continue
-		}
-		go handleConnection(conn)
-	}
-}
-
 func main() {
 	log.SetFlags(log.Ldate|log.Ltime)
 	flag.Parse()
@@ -141,11 +120,11 @@ func main() {
 		return make([]byte, 16384)
 	}
 
-	listener, err := net.Listen("tcp", LISTEN)
+	listener, err := net.Listen("tcp", *localAddr)
 	if err != nil {
 		log.Fatal("Listen error: ", err)
 	}
-	log.Printf("Listening on %s...\n", LISTEN)
+	log.Printf("Listening on %s...\n", *localAddr)
 
 
 	for {
