@@ -14,16 +14,18 @@ import (
 //	"runtime"
 )
 
-var verbosity = flag.Int("v", 2, "verbosity")
+var (
+	verbosity = flag.Int("v", 2, "verbosity")
 
-var pingIntv = flag.Int("i", 60, "ping interval (second)")
-var testMode = flag.String("mode", "http", "test mode: http, ping")
-var pingTimeout = flag.Int("t", 3000, "ping timeout (Millisecond)")
+	pingIntv = flag.Int("i", 60, "ping interval (second)")
+	testMode = flag.String("mode", "http", "test mode: http, ping")
+	pingTimeout = flag.Int("t", 3000, "ping timeout (Millisecond)")
 
-var pingUrl = flag.String("host", "192.168.1.1;8.8.4.4;168.95.1.1;google.com;facebook.com", "url to ping (spare by ';')")
-var httpUrl = flag.String("http", "http://192.168.1.1;http://google.com;http://facebook.com", "http url to try (spare by ';')")
+	pingUrl = flag.String("host", "8.8.4.4;168.95.1.1;google.com;facebook.com", "url to ping (spare by ';')")
+	httpUrl = flag.String("http", "http://google.com;http://facebook.com", "http url to try (spare by ';')")
 
-var powerDownTimeout = flag.Int("pdr", 1800, "no network wait for auto poweroff (second, default: 30 minute)")
+	powerDownTimeout = flag.Int("pdr", -1, "no network wait for auto poweroff (second, default: 30 minute, 1800 sec )")
+)
 
 func main() {
 
@@ -60,8 +62,10 @@ func main() {
 
 WAIT:
 		if !ok {
-			// set poweroff timer
-			pwdTmr = time.AfterFunc(time.Duration(*powerDownTimeout) * time.Second, poweroff)
+			if *powerDownTimeout >= 0 {
+				// set poweroff timer
+				pwdTmr = time.AfterFunc(time.Duration(*powerDownTimeout) * time.Second, poweroff)
+			}
 		} else {
 			if pwdTmr != nil {
 				pwdTmr.Stop()
@@ -94,7 +98,7 @@ func cmdPing(testurl string, timeout time.Duration) (bool) {
 	cmd := exec.Command("ping", "-c", "1", testurl)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		Vln(2, "[cmdPing]err", err)
+		Vln(2, "[cmdPing]err", testurl, err)
 	}
 	Vln(3, "[ping]", string(out))
 
@@ -118,7 +122,7 @@ func webPing(testurl string, timeout time.Duration) (ok bool) {
 	} else if err.(*url.Error).Err == ErrRedirect {
 		ok = true
 	} else {
-		Vln(2, "[webPing]err", err)
+		Vln(2, "[webPing]err", testurl, err)
 //		log.Printf("[webPing] %#v %#v %#v", err, err.(*url.Error).Err, ErrRedirect)
 	}
 	Vln(3, "[http]", ok, out)
