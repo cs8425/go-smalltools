@@ -68,12 +68,16 @@ func main() {
 	}
 
 	nettop := NewNetTop()
+	cputop := NewCPUUsage()
 	//	start := time.Now()
 	for {
 		i -= 1
 		if i == 0 {
 			break
 		}
+
+		cpuDelta := cputop.Update()
+		printCPU(cpuDelta)
 
 		printCPUFreq()
 
@@ -82,10 +86,10 @@ func main() {
 		delta, dt := nettop.Update()
 		printNettop(delta, dt)
 
-		//		elapsed := time.Since(start)
+		// elapsed := time.Since(start)
 		time.Sleep(time.Duration(*T*1000) * time.Millisecond)
 		fmt.Println("============")
-		//		start = time.Now()
+		// start = time.Now()
 	}
 }
 
@@ -131,6 +135,165 @@ func printNettop(delta *NetStat, dt time.Duration) {
 		stat := delta.Stat[iface]
 		fmt.Printf("[iface]\t%v\tRx:%v\tTx:%v\n", iface, Vsize(stat.Rx, dtf), Vsize(stat.Tx, dtf))
 	}
+}
+
+func printCPU(delta map[int]*CPUTime) {
+	count := len(delta)
+	if ct, ok := delta[-1]; ok {
+		rate := (ct.NonIdleC * 10000) / ct.Total
+		fmt.Printf("[cpu]\t%02.2f%%\n", float32(rate)/100.0)
+	}
+	for i := 0; i < count; i++ {
+		ct, ok := delta[i]
+		if !ok {
+			continue
+		}
+		rate := (ct.NonIdleC * 10000) / ct.Total
+		fmt.Printf("[cpu%v]\t%02.2f%%\n", i, float32(rate)/100.0)
+	}
+	// for num, ct := range delta {
+	// 	rate := (ct.NonIdleC * 10000) / ct.Total
+	// 	fmt.Printf("[cpu][%v]\t%02.2f%%\n", num, float32(rate)/100.0)
+	// }
+}
+
+type CPUUsage struct {
+	delta map[int]*CPUTime
+	last  map[int]*CPUTime
+	t0    time.Time
+	dt    time.Duration
+}
+type CPUTime struct {
+	User    uint64
+	Nice    uint64
+	System  uint64
+	Idle    uint64
+	IOwait  uint64
+	Irq     uint64
+	SoftIrq uint64
+	Steal   uint64
+	Guest   uint64
+	GNice   uint64
+
+	IdleC    uint64 // idle + iowait
+	NonIdleC uint64 // user + nice + system + irq + softirq + steal
+	Total    uint64 // IdleC + NonIdleC
+}
+
+func NewCPUUsage() *CPUUsage {
+	cu := &CPUUsage{
+		delta: make(map[int]*CPUTime),
+		last:  make(map[int]*CPUTime),
+		t0:    time.Now(),
+		dt:    1500 * time.Millisecond,
+	}
+	return cu
+}
+func (cu *CPUUsage) Update() map[int]*CPUTime {
+	stat1 := cu.getInfo()
+	cu.dt = time.Since(cu.t0)
+	for num, ct := range stat1 {
+		ct0, ok := cu.last[num]
+		if !ok {
+			continue
+		}
+
+		cd, ok := cu.delta[num]
+		if !ok {
+			cd = &CPUTime{}
+		}
+		cd.User = ct.User - ct0.User
+		cd.Nice = ct.Nice - ct0.Nice
+		cd.System = ct.System - ct0.System
+		cd.Idle = ct.Idle - ct0.Idle
+		cd.IOwait = ct.IOwait - ct0.IOwait
+		cd.Irq = ct.Irq - ct0.Irq
+		cd.SoftIrq = ct.SoftIrq - ct0.SoftIrq
+		cd.Steal = ct.Steal - ct0.Steal
+		cd.Guest = ct.Guest - ct0.Guest
+		cd.GNice = ct.GNice - ct0.GNice
+
+		cd.IdleC = ct.IdleC - ct0.IdleC
+		cd.NonIdleC = ct.NonIdleC - ct0.NonIdleC
+		cd.Total = ct.Total - ct0.Total
+
+		cu.delta[num] = cd
+		// Vln(5, "[cd]", num, cd)
+	}
+	cu.last = stat1
+	cu.t0 = time.Now()
+	return cu.delta
+}
+func (cu *CPUUsage) getInfo() map[int]*CPUTime {
+	lines, _ := ReadLines("/proc/stat")
+	ret := make(map[int]*CPUTime)
+
+	for _, line := range lines {
+		if !strings.HasPrefix(line, "cpu") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 8 {
+			continue
+		}
+
+		cpuNum := -1 // all == -1
+		cpuNumStr := strings.TrimPrefix(fields[0], "cpu")
+		if cpuNumStr != "" {
+			if num, err := strconv.ParseInt(cpuNumStr, 10, 64); err == nil {
+				cpuNum = int(num)
+			}
+		}
+		Vln(5, "[cpu]", cpuNum, fields)
+
+		c := &CPUTime{}
+		if n, err := strconv.ParseInt(fields[1], 10, 64); err == nil {
+			c.User = uint64(n)
+		}
+		if n, err := strconv.ParseInt(fields[2], 10, 64); err == nil {
+			c.Nice = uint64(n)
+		}
+		if n, err := strconv.ParseInt(fields[3], 10, 64); err == nil {
+			c.System = uint64(n)
+		}
+		if n, err := strconv.ParseInt(fields[4], 10, 64); err == nil {
+			c.Idle = uint64(n)
+		}
+		if n, err := strconv.ParseInt(fields[5], 10, 64); err == nil {
+			c.IOwait = uint64(n)
+		}
+		if n, err := strconv.ParseInt(fields[6], 10, 64); err == nil {
+			c.Irq = uint64(n)
+		}
+		if n, err := strconv.ParseInt(fields[7], 10, 64); err == nil {
+			c.SoftIrq = uint64(n)
+		}
+
+		count := len(fields)
+		if count >= 9 {
+			if n, err := strconv.ParseInt(fields[8], 10, 64); err == nil {
+				c.Steal = uint64(n)
+			}
+		}
+		if count >= 10 {
+			if n, err := strconv.ParseInt(fields[9], 10, 64); err == nil {
+				c.Guest = uint64(n)
+			}
+		}
+		if count >= 11 {
+			if n, err := strconv.ParseInt(fields[10], 10, 64); err == nil {
+				c.GNice = uint64(n)
+			}
+		}
+
+		c.IdleC = c.Idle + c.IOwait
+		c.NonIdleC = c.User + c.Nice + c.System + c.Irq + c.SoftIrq + c.Steal
+		c.Total = c.IdleC + c.NonIdleC
+
+		ret[cpuNum] = c
+	}
+
+	return ret
 }
 
 type NetTop struct {
