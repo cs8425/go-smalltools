@@ -79,8 +79,6 @@ func main() {
 		cpuDelta := cputop.Update()
 		printCPU(cpuDelta)
 
-		printCPUFreq()
-
 		printTemp()
 
 		delta, dt := nettop.Update()
@@ -149,12 +147,26 @@ func printCPU(delta map[int]*CPUTime) {
 			continue
 		}
 		rate := (ct.NonIdleC * 10000) / ct.Total
-		fmt.Printf("[cpu%v]\t%02.2f%%\n", i, float32(rate)/100.0)
+		freq := getCPUFreq(i)
+		if freq >= 0 {
+			fmt.Printf("[cpu%v]\t%02.2f%%\t%v\n", i, float32(rate)/100.0, Vfreq(freq))
+		} else {
+			fmt.Printf("[cpu%v]\t%02.2f%%\n", i, float32(rate)/100.0)
+		}
 	}
 	// for num, ct := range delta {
 	// 	rate := (ct.NonIdleC * 10000) / ct.Total
 	// 	fmt.Printf("[cpu][%v]\t%02.2f%%\n", num, float32(rate)/100.0)
 	// }
+}
+func getCPUFreq(num int) int64 {
+	//"/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"
+	basePath := fmt.Sprintf("/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq", num)
+	freq, err := getInt(basePath)
+	if err != nil {
+		return -1
+	}
+	return freq
 }
 
 type CPUUsage struct {
@@ -244,7 +256,7 @@ func (cu *CPUUsage) getInfo() map[int]*CPUTime {
 				cpuNum = int(num)
 			}
 		}
-		Vln(5, "[cpu]", cpuNum, fields)
+		// Vln(5, "[cpu]", cpuNum, fields)
 
 		c := &CPUTime{}
 		if n, err := strconv.ParseInt(fields[1], 10, 64); err == nil {
