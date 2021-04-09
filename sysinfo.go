@@ -3,10 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"runtime"
 	"time"
-	"io/ioutil"
 
 	"bufio"
 	"os"
@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	T = flag.Float64("t", 2, "update time(s)")
-	C = flag.Uint("c", 0, "count (0 == unlimit)")
+	T     = flag.Float64("t", 2, "update time(s)")
+	C     = flag.Uint("c", 0, "count (0 == unlimit)")
 	Inter = flag.String("i", "*", "interface")
 
 	verbosity = flag.Int("v", 2, "verbosity")
@@ -48,7 +48,7 @@ func getInt(p string) (int64, error) {
 		return 0, err
 	}
 	num, err := strconv.ParseInt(strings.TrimSpace(string(text)), 10, 64)
-	return num,err
+	return num, err
 }
 
 func main() {
@@ -68,7 +68,7 @@ func main() {
 	}
 
 	nettop := NewNetTop()
-//	start := time.Now()
+	//	start := time.Now()
 	for {
 		i -= 1
 		if i == 0 {
@@ -82,15 +82,15 @@ func main() {
 		delta, dt := nettop.Update()
 		printNettop(delta, dt)
 
-//		elapsed := time.Since(start)
+		//		elapsed := time.Since(start)
 		time.Sleep(time.Duration(*T*1000) * time.Millisecond)
 		fmt.Println("============")
-//		start = time.Now()
+		//		start = time.Now()
 	}
 }
 
 func printCPUFreq() {
-//"/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"
+	//"/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"
 	const basePath = "/sys/devices/system/cpu/"
 	files, err := ioutil.ReadDir(basePath)
 	if err != nil {
@@ -108,7 +108,7 @@ func printCPUFreq() {
 }
 
 func printTemp() {
-//"/sys/class/thermal/thermal_zone0/temp"
+	//"/sys/class/thermal/thermal_zone0/temp"
 	const basePath = "/sys/class/thermal/"
 	files, err := ioutil.ReadDir(basePath)
 	if err != nil {
@@ -134,18 +134,19 @@ func printNettop(delta *NetStat, dt time.Duration) {
 }
 
 type NetTop struct {
-	delta *NetStat
-	last *NetStat
-	t0 time.Time
-	dt time.Duration
+	delta     *NetStat
+	last      *NetStat
+	t0        time.Time
+	dt        time.Duration
 	Interface string
 }
+
 func NewNetTop() *NetTop {
 	nt := &NetTop{
-		delta: NewNetStat(),
-		last: NewNetStat(),
-		t0: time.Now(),
-		dt: 1500 * time.Millisecond,
+		delta:     NewNetStat(),
+		last:      NewNetStat(),
+		t0:        time.Now(),
+		dt:        1500 * time.Millisecond,
 		Interface: "*",
 	}
 	return nt
@@ -228,9 +229,10 @@ type NetStat struct {
 	Dev  []string
 	Stat map[string]*DevStat
 }
+
 func NewNetStat() *NetStat {
 	return &NetStat{
-		Dev: make([]string, 0),
+		Dev:  make([]string, 0),
 		Stat: make(map[string]*DevStat),
 	}
 }
@@ -308,4 +310,3 @@ func Vln(level int, v ...interface{}) {
 		log.Println(v...)
 	}
 }
-
