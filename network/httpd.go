@@ -34,6 +34,12 @@ var (
 func reqlog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		Vln(3, r.Method, r.URL, r.RemoteAddr, r.Host)
+		if *verbosity >= 6 {
+			for i, hdr := range r.Header {
+				Vln(6, "---", i, len(hdr), hdr)
+			}
+			Vln(6, "")
+		}
 		w.Header().Add("Service-Worker-Allowed", "/")
 		gzw := TryGzipResponse(w, r)
 		if gzw != nil {
