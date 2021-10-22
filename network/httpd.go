@@ -20,8 +20,8 @@ var (
 
 	file = flag.String("f", "/:index.html;/index.html:index.html", "allow put file")
 
-	readTimeout = flag.Int("rt", 5, "http ReadTimeout (Second)")
-	writeTimeout = flag.Int("wt", 20, "http WriteTimeout (Second)")
+	readTimeout = flag.Int("rt", 5, "http ReadTimeout (Second), <= 0 disable")
+	writeTimeout = flag.Int("wt", 0, "http WriteTimeout (Second), <= 0 disable")
 
 	verbosity = flag.Int("v", 3, "verbosity")
 	port = flag.String("l", ":4040", "bind port")
