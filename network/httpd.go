@@ -22,6 +22,8 @@ var (
 
 	readTimeout = flag.Int("rt", 5, "http ReadTimeout (Second), <= 0 disable")
 	writeTimeout = flag.Int("wt", 0, "http WriteTimeout (Second), <= 0 disable")
+	rxSpd = flag.Int("rx", 1024*1024, "RX speed (byte/sec)")
+	txSpd = flag.Int("tx", 1024*1024, "TX speed (byte/sec)")
 
 	verbosity = flag.Int("v", 3, "verbosity")
 	port = flag.String("l", ":4040", "bind port")
@@ -163,6 +165,8 @@ func main() {
 		close(idleConnsClosed)
 	}()
 
+	log.Printf("srv -> client (TX) limit: %v\n", *txSpd)
+	log.Printf("srv <- client (RX) limit: %v\n", *rxSpd)
 	startServer(srv, *crtFile, *keyFile)
 
 	<-idleConnsClosed
@@ -273,4 +277,158 @@ func TryGzipResponse(w http.ResponseWriter, r *http.Request) (*GzipResponseWrite
 
 	return &GzipResponseWriter{w, gw}
 }
+
+type SpeedCtrl struct {
+	In           net.Conn
+	Tx           int64
+	Rx           int64
+
+	die          chan struct{}
+	dieLock      sync.Mutex
+
+
+	rxLim        float64
+	rx0          int64
+	rxt          time.Time
+
+	txLim        float64
+	tx0          int64
+	txt          time.Time
+}
+
+func (c *SpeedCtrl) Close() error {
+	c.dieLock.Lock()
+
+	select {
+	case <-c.die:
+		c.dieLock.Unlock()
+		return nil
+	default:
+	}
+
+	close(c.die)
+	return c.In.Close()
+}
+
+func (c *SpeedCtrl) Read(data []byte) (n int, err error)  {
+	n, err = c.In.Read(data)
+	curr := atomic.AddInt64(&c.Rx, int64(n))
+
+	if c.rxLim <= 0 {
+		return
+	}
+
+	now := time.Now()
+	emsRx := int64(c.rxLim * now.Sub(c.rxt).Seconds()) + c.rx0
+	if curr > emsRx {
+		over := curr - emsRx
+		sleep := float64(over) / c.rxLim
+		sleepT := time.Duration(sleep * 1000000000) * time.Nanosecond
+//log.Println("[Rx over]", curr, emsRx, over, sleepT)
+		select {
+		case <-c.die:
+			return n, err
+		case <-time.After(sleepT):
+		}
+	} else {
+		c.rxt = now
+		c.rx0 = curr
+	}
+
+	return n, err
+}
+
+func (c *SpeedCtrl) Write(data []byte) (n int, err error) {
+	n, err = c.In.Write(data)
+	curr := atomic.AddInt64(&c.Tx, int64(n))
+
+	if c.txLim <= 0 {
+		return
+	}
+
+	now := time.Now()
+	emsTx := int64(c.txLim * now.Sub(c.txt).Seconds()) + c.tx0
+	if curr > emsTx {
+		over := curr - emsTx
+		sleep := float64(over) / c.txLim
+		sleepT := time.Duration(sleep * 1000000000) * time.Nanosecond
+//log.Println("[Tx over]", curr, emsTx, over, sleepT)
+		select {
+		case <-c.die:
+			return n, err
+		case <-time.After(sleepT):
+		}
+	} else {
+		c.txt = now
+		c.tx0 = curr
+	}
+
+	return n, err
+}
+
+// LocalAddr satisfies net.Conn interface
+func (c *SpeedCtrl) LocalAddr() net.Addr {
+	if ts, ok := c.In.(interface {
+		LocalAddr() net.Addr
+	}); ok {
+		return ts.LocalAddr()
+	}
+	return nil
+}
+
+// RemoteAddr satisfies net.Conn interface
+func (c *SpeedCtrl) RemoteAddr() net.Addr {
+	if ts, ok := c.In.(interface {
+		RemoteAddr() net.Addr
+	}); ok {
+		return ts.RemoteAddr()
+	}
+	return nil
+}
+
+func (c *SpeedCtrl) SetReadDeadline(t time.Time) error {
+	return c.In.SetReadDeadline(t)
+}
+
+func (c *SpeedCtrl) SetWriteDeadline(t time.Time) error {
+	return c.In.SetWriteDeadline(t)
+}
+
+func (c *SpeedCtrl) SetDeadline(t time.Time) error {
+	if err := c.SetReadDeadline(t); err != nil {
+		return err
+	}
+	if err := c.SetWriteDeadline(t); err != nil {
+		return err
+	}
+	return nil
+}
+
+func NewSpeedCtrl(con net.Conn) (c *SpeedCtrl) {
+	c = &SpeedCtrl{}
+	c.die = make(chan struct{})
+	c.In = con
+
+	now := time.Now()
+	c.rxt = now
+	c.txt = now
+
+	return c
+}
+
+// Bytes / sec
+func (c *SpeedCtrl) SetRxSpd(spd int) {
+	now := time.Now()
+	c.rxt = now
+	c.rx0 = c.Rx
+	c.rxLim = float64(spd)
+}
+
+func (c *SpeedCtrl) SetTxSpd(spd int) {
+	now := time.Now()
+	c.txt = now
+	c.tx0 = c.Tx
+	c.txLim = float64(spd)
+}
+
 
