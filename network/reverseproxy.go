@@ -26,23 +26,23 @@ package main
 
 import (
 	"crypto/tls"
+	"flag"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"time"
-	"flag"
-	"log"
 )
 
 var (
-	port = flag.String("p", "127.0.0.1:8080", "https bind port")
+	port   = flag.String("p", "127.0.0.1:8080", "https bind port")
 	target = flag.String("t", "http://127.0.0.1:4040/", "target url")
 
-	readTimeout = flag.Int("rt", 5, "http ReadTimeout (Second)")
+	readTimeout  = flag.Int("rt", 5, "http ReadTimeout (Second)")
 	writeTimeout = flag.Int("wt", 20, "http WriteTimeout (Second)")
 
-	crtFile    = flag.String("crt", "cert/server.crt", "PEM encoded certificate file, empty for http")
-	keyFile    = flag.String("key", "cert/server.key", "PEM encoded private key file, empty for http")
+	crtFile = flag.String("crt", "cert/server.crt", "PEM encoded certificate file, empty for http")
+	keyFile = flag.String("key", "cert/server.key", "PEM encoded private key file, empty for http")
 )
 
 func main() {
@@ -61,10 +61,10 @@ func main() {
 
 	// start http server
 	srv := &http.Server{
-		ReadTimeout: time.Duration(*readTimeout) * time.Second,
+		ReadTimeout:  time.Duration(*readTimeout) * time.Second,
 		WriteTimeout: time.Duration(*writeTimeout) * time.Second,
-		Addr: *port,
-		Handler: nil,
+		Addr:         *port,
+		Handler:      nil,
 	}
 	startServer(srv, *crtFile, *keyFile)
 }
@@ -94,7 +94,7 @@ func startServer(srv *http.Server, crt string, key string) {
 				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
 
 				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, // http/2 must
-				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, // http/2 must
+				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,   // http/2 must
 
 				tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
 				tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
@@ -103,7 +103,7 @@ func startServer(srv *http.Server, crt string, key string) {
 				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
 
 				tls.TLS_RSA_WITH_AES_256_GCM_SHA384, // weak
-				tls.TLS_RSA_WITH_AES_256_CBC_SHA, // waek
+				tls.TLS_RSA_WITH_AES_256_CBC_SHA,    // waek
 			},
 		}
 		srv.TLSConfig = cfg
@@ -120,4 +120,3 @@ func startServer(srv *http.Server, crt string, key string) {
 		log.Printf("[server] ListenAndServe error: %v", err)
 	}
 }
-

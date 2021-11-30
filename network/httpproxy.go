@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -10,19 +11,18 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"flag"
 )
 
 var (
 	verbosity = 3
-	port = flag.String("l", ":4040", "bind port")
+	port      = flag.String("l", ":4040", "bind port")
 )
 
 // global recycle buffer
 var copyBuf sync.Pool
 
 func main() {
-	log.SetFlags(log.LstdFlags|log.Lshortfile)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	runtime.GOMAXPROCS(runtime.NumCPU() + 2)
 	copyBuf.New = func() interface{} {
@@ -34,7 +34,6 @@ func main() {
 		log.Fatal("Listen error: ", err)
 	}
 	log.Printf("Listening on %s...\n", *port)
-
 
 	for {
 		conn, err := listener.Accept()
@@ -74,7 +73,6 @@ func handleClientRequest(client net.Conn) {
 		address = hostPortURL.Host
 	}
 
-
 	Vlogln(3, "Dial to:", method, address)
 	server, err := net.Dial("tcp", address)
 	if err != nil {
@@ -91,9 +89,7 @@ func handleClientRequest(client net.Conn) {
 }
 
 func handleClient(p1, p2 io.ReadWriteCloser) {
-//	Vlogln(2, "stream opened")
-//	defer Vlogln(2, "stream closed")
-//	defer p1.Close()
+	// defer p1.Close()
 	defer p2.Close()
 
 	// start tunnel
@@ -135,4 +131,3 @@ func Vlogln(level int, v ...interface{}) {
 		log.Println(v...)
 	}
 }
-

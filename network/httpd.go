@@ -2,17 +2,17 @@ package main
 
 import (
 	"compress/gzip"
+	"context"
 	"crypto/tls"
-	"net/http"
+	"flag"
 	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
 	"path"
 	"strings"
 	"time"
-	"flag"
-	"log"
-	"context"
-	"os"
-	"os/signal"
 )
 
 var (
@@ -20,14 +20,14 @@ var (
 
 	file = flag.String("f", "/:index.html;/index.html:index.html", "allow put file")
 
-	readTimeout = flag.Int("rt", 5, "http ReadTimeout (Second), <= 0 disable")
+	readTimeout  = flag.Int("rt", 5, "http ReadTimeout (Second), <= 0 disable")
 	writeTimeout = flag.Int("wt", 0, "http WriteTimeout (Second), <= 0 disable")
-	rxSpd = flag.Int("rx", 1024*1024, "RX speed (byte/sec)")
-	txSpd = flag.Int("tx", 1024*1024, "TX speed (byte/sec)")
+	rxSpd        = flag.Int("rx", 1024*1024, "RX speed (byte/sec)")
+	txSpd        = flag.Int("tx", 1024*1024, "TX speed (byte/sec)")
 
 	verbosity = flag.Int("v", 3, "verbosity")
-	port = flag.String("l", ":4040", "bind port")
-	dir = flag.String("d", "./www", "bind dir")
+	port      = flag.String("l", ":4040", "bind port")
+	dir       = flag.String("d", "./www", "bind dir")
 
 	crtFile = flag.String("crt", "", "https certificate file")
 	keyFile = flag.String("key", "", "https private key file")
@@ -100,7 +100,7 @@ func wiki(next http.Handler) http.Handler {
 	})
 }
 
-type userlist map[string]string // user -> pass
+type userlist map[string]string   // user -> pass
 type AuthDir map[string]*userlist // path -> user list
 
 func basicAuth(w http.ResponseWriter, r *http.Request, h http.Handler, list *userlist) {
@@ -129,26 +129,26 @@ func basicAuthDir(h http.Handler, authInfo *AuthDir) http.Handler {
 				return
 			}
 		}
-//		Vln(3, "HttpAuth Path:", r.URL.Path, ok, list)
+		// Vln(3, "HttpAuth Path:", r.URL.Path, ok, list)
 		h.ServeHTTP(w, r)
 	})
 }
 
 func main() {
 	flag.Parse()
-/*
+	/*
 	if config.HttpAuth != nil {
 		Vln(2, "HttpAuth:", config.HttpAuth)
 		fileHandler = basicAuthDir(fileHandler, config.HttpAuth)
 	}
-*/
+	*/
 
 	http.Handle("/", reqlog(wiki(http.FileServer(http.Dir(*dir)))))
 	srv := &http.Server{
-		ReadTimeout: time.Duration(*readTimeout) * time.Second,
+		ReadTimeout:  time.Duration(*readTimeout) * time.Second,
 		WriteTimeout: time.Duration(*writeTimeout) * time.Second,
-		Addr: *port,
-		Handler: nil,
+		Addr:         *port,
+		Handler:      nil,
 	}
 
 	idleConnsClosed := make(chan struct{})
@@ -190,7 +190,7 @@ func startServer(srv *http.Server, crt string, key string) {
 				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
 
 				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, // http/2 must
-				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, // http/2 must
+				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,   // http/2 must
 
 				tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
 				tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
@@ -199,7 +199,7 @@ func startServer(srv *http.Server, crt string, key string) {
 				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
 
 				tls.TLS_RSA_WITH_AES_256_GCM_SHA384, // weak
-				tls.TLS_RSA_WITH_AES_256_CBC_SHA, // waek
+				tls.TLS_RSA_WITH_AES_256_CBC_SHA,    // waek
 			},
 		}
 		srv.TLSConfig = cfg
@@ -246,14 +246,14 @@ func (w *GzipResponseWriter) Write(p []byte) (int, error) {
 	return w.gzip.Write(p)
 }
 
-func (w *GzipResponseWriter) Close() (error) {
+func (w *GzipResponseWriter) Close() error {
 	if w.gzip != nil {
 		return w.gzip.Close()
 	}
 	return nil
 }
 
-func CanAcceptsGzip(r *http.Request) (bool) {
+func CanAcceptsGzip(r *http.Request) bool {
 	s := strings.ToLower(r.Header.Get("Accept-Encoding"))
 	for _, ss := range strings.Split(s, ",") {
 		if strings.HasPrefix(ss, "gzip") {
@@ -263,7 +263,7 @@ func CanAcceptsGzip(r *http.Request) (bool) {
 	return false
 }
 
-func TryGzipResponse(w http.ResponseWriter, r *http.Request) (*GzipResponseWriter) {
+func TryGzipResponse(w http.ResponseWriter, r *http.Request) *GzipResponseWriter {
 	if !CanAcceptsGzip(r) || *gzipLv == 0 {
 		return nil
 	}
@@ -279,21 +279,20 @@ func TryGzipResponse(w http.ResponseWriter, r *http.Request) (*GzipResponseWrite
 }
 
 type SpeedCtrl struct {
-	In           net.Conn
-	Tx           int64
-	Rx           int64
+	In net.Conn
+	Tx int64
+	Rx int64
 
-	die          chan struct{}
-	dieLock      sync.Mutex
+	die     chan struct{}
+	dieLock sync.Mutex
 
+	rxLim float64
+	rx0   int64
+	rxt   time.Time
 
-	rxLim        float64
-	rx0          int64
-	rxt          time.Time
-
-	txLim        float64
-	tx0          int64
-	txt          time.Time
+	txLim float64
+	tx0   int64
+	txt   time.Time
 }
 
 func (c *SpeedCtrl) Close() error {
@@ -310,7 +309,7 @@ func (c *SpeedCtrl) Close() error {
 	return c.In.Close()
 }
 
-func (c *SpeedCtrl) Read(data []byte) (n int, err error)  {
+func (c *SpeedCtrl) Read(data []byte) (n int, err error) {
 	n, err = c.In.Read(data)
 	curr := atomic.AddInt64(&c.Rx, int64(n))
 
@@ -319,12 +318,12 @@ func (c *SpeedCtrl) Read(data []byte) (n int, err error)  {
 	}
 
 	now := time.Now()
-	emsRx := int64(c.rxLim * now.Sub(c.rxt).Seconds()) + c.rx0
+	emsRx := int64(c.rxLim*now.Sub(c.rxt).Seconds()) + c.rx0
 	if curr > emsRx {
 		over := curr - emsRx
 		sleep := float64(over) / c.rxLim
-		sleepT := time.Duration(sleep * 1000000000) * time.Nanosecond
-//log.Println("[Rx over]", curr, emsRx, over, sleepT)
+		sleepT := time.Duration(sleep*1000000000) * time.Nanosecond
+		//log.Println("[Rx over]", curr, emsRx, over, sleepT)
 		select {
 		case <-c.die:
 			return n, err
@@ -347,12 +346,12 @@ func (c *SpeedCtrl) Write(data []byte) (n int, err error) {
 	}
 
 	now := time.Now()
-	emsTx := int64(c.txLim * now.Sub(c.txt).Seconds()) + c.tx0
+	emsTx := int64(c.txLim*now.Sub(c.txt).Seconds()) + c.tx0
 	if curr > emsTx {
 		over := curr - emsTx
 		sleep := float64(over) / c.txLim
-		sleepT := time.Duration(sleep * 1000000000) * time.Nanosecond
-//log.Println("[Tx over]", curr, emsTx, over, sleepT)
+		sleepT := time.Duration(sleep*1000000000) * time.Nanosecond
+		//log.Println("[Tx over]", curr, emsTx, over, sleepT)
 		select {
 		case <-c.die:
 			return n, err
@@ -430,5 +429,3 @@ func (c *SpeedCtrl) SetTxSpd(spd int) {
 	c.tx0 = c.Tx
 	c.txLim = float64(spd)
 }
-
-

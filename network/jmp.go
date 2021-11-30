@@ -3,12 +3,12 @@ package main
 import (
 	"io"
 	"log"
-//	"crypto/tls"
-	"net"
+	// "crypto/tls"
 	"flag"
+	"net"
+	"runtime"
 	"sync"
 	"sync/atomic"
-	"runtime"
 	"time"
 )
 
@@ -93,7 +93,7 @@ func proxyConn(conn net.Conn) {
 
 	cp(p1, rConn)
 
-//	log.Printf("handleConnection end: %s\n", conn.RemoteAddr())
+	// log.Printf("handleConnection end: %s\n", conn.RemoteAddr())
 }
 
 func cp(p1, p2 io.ReadWriteCloser) {
@@ -122,21 +122,20 @@ func cp(p1, p2 io.ReadWriteCloser) {
 }
 
 type SpeedCtrl struct {
-	In           net.Conn
-	Tx           int64
-	Rx           int64
+	In net.Conn
+	Tx int64
+	Rx int64
 
-	die          chan struct{}
-	dieLock      sync.Mutex
+	die     chan struct{}
+	dieLock sync.Mutex
 
+	rxLim float64
+	rx0   int64
+	rxt   time.Time
 
-	rxLim        float64
-	rx0          int64
-	rxt          time.Time
-
-	txLim        float64
-	tx0          int64
-	txt          time.Time
+	txLim float64
+	tx0   int64
+	txt   time.Time
 }
 
 func (c *SpeedCtrl) Close() error {
@@ -153,7 +152,7 @@ func (c *SpeedCtrl) Close() error {
 	return c.In.Close()
 }
 
-func (c *SpeedCtrl) Read(data []byte) (n int, err error)  {
+func (c *SpeedCtrl) Read(data []byte) (n int, err error) {
 	n, err = c.In.Read(data)
 	curr := atomic.AddInt64(&c.Rx, int64(n))
 
@@ -162,12 +161,12 @@ func (c *SpeedCtrl) Read(data []byte) (n int, err error)  {
 	}
 
 	now := time.Now()
-	emsRx := int64(c.rxLim * now.Sub(c.rxt).Seconds()) + c.rx0
+	emsRx := int64(c.rxLim*now.Sub(c.rxt).Seconds()) + c.rx0
 	if curr > emsRx {
 		over := curr - emsRx
 		sleep := float64(over) / c.rxLim
-		sleepT := time.Duration(sleep * 1000000000) * time.Nanosecond
-//log.Println("[Rx over]", curr, emsRx, over, sleepT)
+		sleepT := time.Duration(sleep*1000000000) * time.Nanosecond
+		//log.Println("[Rx over]", curr, emsRx, over, sleepT)
 		select {
 		case <-c.die:
 			return n, err
@@ -190,12 +189,12 @@ func (c *SpeedCtrl) Write(data []byte) (n int, err error) {
 	}
 
 	now := time.Now()
-	emsTx := int64(c.txLim * now.Sub(c.txt).Seconds()) + c.tx0
+	emsTx := int64(c.txLim*now.Sub(c.txt).Seconds()) + c.tx0
 	if curr > emsTx {
 		over := curr - emsTx
 		sleep := float64(over) / c.txLim
-		sleepT := time.Duration(sleep * 1000000000) * time.Nanosecond
-//log.Println("[Tx over]", curr, emsTx, over, sleepT)
+		sleepT := time.Duration(sleep*1000000000) * time.Nanosecond
+		//log.Println("[Tx over]", curr, emsTx, over, sleepT)
 		select {
 		case <-c.die:
 			return n, err
@@ -273,4 +272,3 @@ func (c *SpeedCtrl) SetTxSpd(spd int) {
 	c.tx0 = c.Tx
 	c.txLim = float64(spd)
 }
-

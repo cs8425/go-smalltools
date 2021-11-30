@@ -3,19 +3,19 @@
 package main
 
 import (
-	"io"
 	"flag"
+	"io"
 	"log"
 	"net"
+	"runtime"
 	"sync"
 	"time"
-	"runtime"
 
-	"unsafe"
-	"syscall"
 	"errors"
+	"syscall"
+	"unsafe"
 
-//	"fmt"
+	//	"fmt"
 	"strconv"
 )
 
@@ -27,7 +27,6 @@ var targetAddr = flag.String("t", "192.168.1.1:80", "target addr")
 
 // global recycle buffer
 var copyBuf sync.Pool
-
 
 // thank's https://github.com/shadowsocks/go-shadowsocks2
 const (
@@ -114,7 +113,7 @@ func ipv6_getorigdst(fd uintptr) (Addr, error) {
 	raw := syscall.RawSockaddrInet6{}
 	siz := unsafe.Sizeof(raw)
 	if _, _, err := syscall.Syscall6(syscall.SYS_GETSOCKOPT, fd, syscall.IPPROTO_IPV6, IP6T_SO_ORIGINAL_DST, uintptr(unsafe.Pointer(&raw)), uintptr(unsafe.Pointer(&siz)), 0); err != 0 {
-//	if _, _, err := syscall.Syscall6(syscall.SYS_GETSOCKOPT, fd, syscall.SOL_IPV6, IP6T_SO_ORIGINAL_DST, uintptr(unsafe.Pointer(&raw)), uintptr(unsafe.Pointer(&siz)), 0); err != 0 {
+		// if _, _, err := syscall.Syscall6(syscall.SYS_GETSOCKOPT, fd, syscall.SOL_IPV6, IP6T_SO_ORIGINAL_DST, uintptr(unsafe.Pointer(&raw)), uintptr(unsafe.Pointer(&siz)), 0); err != 0 {
 		return nil, err
 	}
 
@@ -127,7 +126,7 @@ func ipv6_getorigdst(fd uintptr) (Addr, error) {
 }
 
 func main() {
-	log.SetFlags(log.Ldate|log.Ltime)
+	log.SetFlags(log.Ldate | log.Ltime)
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU() + 2)
 
@@ -140,7 +139,6 @@ func main() {
 		log.Fatal("Listen error: ", err)
 	}
 	log.Printf("Listening on %s...\n", *localAddr)
-
 
 	for {
 		conn, err := listener.Accept()
@@ -199,7 +197,7 @@ func handleConnection(p1 net.Conn) {
 }
 
 func cp(p1, p2 io.ReadWriteCloser) {
-//	defer p1.Close()
+	// defer p1.Close()
 	defer p2.Close()
 
 	// start tunnel
@@ -241,4 +239,3 @@ func Vln(level int, v ...interface{}) {
 		log.Println(v...)
 	}
 }
-

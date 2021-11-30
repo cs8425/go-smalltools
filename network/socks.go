@@ -5,15 +5,15 @@ package main
 
 import (
 	"io"
-//	"os"
-//	"fmt"
+	// "os"
+	// "fmt"
+	"flag"
 	"log"
 	"net"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
-	"runtime"
-	"flag"
 )
 
 var (
@@ -82,8 +82,6 @@ func handleConnection(p1 net.Conn) {
 }
 
 func handleClient(p1, p2 io.ReadWriteCloser) {
-//	Vln(2, "stream opened")
-//	defer Vln(2, "stream closed")
 	defer p1.Close()
 	defer p2.Close()
 
@@ -112,7 +110,7 @@ func handleClient(p1, p2 io.ReadWriteCloser) {
 }
 
 func main() {
-	log.SetFlags(log.Ldate|log.Ltime)
+	log.SetFlags(log.Ldate | log.Ltime)
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU() + 2)
 
@@ -125,7 +123,6 @@ func main() {
 		log.Fatal("Listen error: ", err)
 	}
 	log.Printf("Listening on %s...\n", *localAddr)
-
 
 	for {
 		conn, err := listener.Accept()
@@ -152,5 +149,3 @@ func Vln(level int, v ...interface{}) {
 		log.Println(v...)
 	}
 }
-
-

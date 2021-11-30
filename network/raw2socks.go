@@ -3,14 +3,14 @@
 package main
 
 import (
-	"io"
 	"flag"
+	"io"
 	"log"
 	"net"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
-	"runtime"
 )
 
 var verbosity = flag.Int("v", 3, "verbosity")
@@ -62,7 +62,7 @@ func handleConnection(p1 net.Conn) {
 }
 
 func cp(p1, p2 io.ReadWriteCloser) {
-//	defer p1.Close()
+	// defer p1.Close()
 	defer p2.Close()
 
 	// start tunnel
@@ -89,9 +89,8 @@ func cp(p1, p2 io.ReadWriteCloser) {
 	}
 }
 
-
 func main() {
-	log.SetFlags(log.Ldate|log.Ltime)
+	log.SetFlags(log.Ldate | log.Ltime)
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU() + 2)
 
@@ -119,13 +118,11 @@ func main() {
 	socksReq = append(socksReq, host...)
 	socksReq = append(socksReq, byte(port>>8), byte(port))
 
-
 	listener, err := net.Listen("tcp", *localAddr)
 	if err != nil {
 		log.Fatal("Listen error: ", err)
 	}
 	log.Printf("Listening on %s...\n", *localAddr)
-
 
 	for {
 		conn, err := listener.Accept()
@@ -152,4 +149,3 @@ func Vln(level int, v ...interface{}) {
 		log.Println(v...)
 	}
 }
-
