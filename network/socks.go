@@ -18,6 +18,8 @@ import (
 
 var (
 	localAddr = flag.String("l", ":1080", "bind address")
+	outAddr = flag.String("oaddr", "", "out going address")
+	outIf = flag.String("oif", "", "out going interface")
 
 	verbosity = flag.Int("v", 3, "verbosity")
 )
@@ -31,7 +33,7 @@ func replyAndClose(p1 net.Conn, rpy int) {
 }
 
 // thanks: http://www.golangnote.com/topic/141.html
-func handleConnection(p1 net.Conn) {
+func handleConnection(p1 net.Conn, dialer net.Dialer) {
 	var b [1024]byte
 	n, err := p1.Read(b[:])
 	if err != nil {
@@ -67,7 +69,7 @@ func handleConnection(p1 net.Conn) {
 	}
 	port = strconv.Itoa(int(b[n-2])<<8 | int(b[n-1]))
 	backend := net.JoinHostPort(host, port)
-	p2, err := net.DialTimeout("tcp", backend, 5*time.Second)
+	p2, err := dialer.Dial("tcp", backend)
 	if err != nil {
 		Vln(2, backend, err)
 		replyAndClose(p1, 0x05) // X'05'
@@ -124,13 +126,46 @@ func main() {
 	}
 	log.Printf("Listening on %s...\n", *localAddr)
 
+	dialer := net.Dialer{
+		Timeout: 5*time.Second,
+	}
+	if *outIf != "" {
+		ief, err := net.InterfaceByName(*outIf)
+		if err != nil {
+			log.Fatal("get Interface error", err)
+		}
+		addrs, err := ief.Addrs()
+		if err != nil {
+			log.Fatal(err)
+		}
+		tcpAddr := &net.TCPAddr{
+			IP: addrs[0].(*net.IPNet).IP,
+		}
+		dialer.LocalAddr = tcpAddr
+	}
+	if *outAddr != "" {
+		addrStr := *outAddr
+		for _, c := range addrStr {
+			// IPv6 addr need use []
+			if c == ':' {
+				addrStr = "[" + addrStr + "]"
+				break
+			}
+		}
+		addr, err := net.ResolveTCPAddr("tcp", addrStr + ":0")
+		if err != nil {
+			log.Fatal("set out going address error:", err)
+		}
+		dialer.LocalAddr = addr
+	}
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Println("Accept error:", err)
 			continue
 		}
-		go handleConnection(conn)
+		go handleConnection(conn, dialer)
 	}
 }
 
