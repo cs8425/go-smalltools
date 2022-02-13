@@ -1,5 +1,6 @@
 // This is a simple SOCKS5 proxy server.
 // Copyright 2013-2015, physacco. Distributed under the MIT license.
+// modify by cs8425.
 
 package main
 
@@ -13,13 +14,14 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 )
 
 var (
 	localAddr = flag.String("l", ":1080", "bind address")
-	outAddr = flag.String("oaddr", "", "out going address")
-	outIf = flag.String("oif", "", "out going interface")
+	outAddr   = flag.String("oaddr", "", "out going address")
+	outIf     = flag.String("oif", "", "out going interface")
 
 	verbosity = flag.Int("v", 3, "verbosity")
 )
@@ -78,6 +80,7 @@ func handleConnection(p1 net.Conn, dialer net.Dialer) {
 
 	reply := []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 	Vln(3, "socks to:", backend)
+	Vln(6, "[dbg]conn", p2.LocalAddr(), "=>", p2.RemoteAddr())
 	p1.Write(reply) // reply OK
 
 	go handleClient(p1, p2)
@@ -127,7 +130,7 @@ func main() {
 	log.Printf("Listening on %s...\n", *localAddr)
 
 	dialer := net.Dialer{
-		Timeout: 5*time.Second,
+		Timeout: 5 * time.Second,
 	}
 	if *outIf != "" {
 		ief, err := net.InterfaceByName(*outIf)
@@ -142,6 +145,21 @@ func main() {
 			IP: addrs[0].(*net.IPNet).IP,
 		}
 		dialer.LocalAddr = tcpAddr
+
+		// Linux can bind to particular interface
+		dialer.Control = func(network string, address string, c syscall.RawConn) error {
+			var operr error
+			fn := func(fd uintptr) {
+				operr = syscall.SetsockoptString(int(fd), syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, *outIf)
+			}
+			if err := c.Control(fn); err != nil {
+				return err
+			}
+			if operr != nil {
+				return operr
+			}
+			return nil
+		}
 	}
 	if *outAddr != "" {
 		addrStr := *outAddr
@@ -152,7 +170,7 @@ func main() {
 				break
 			}
 		}
-		addr, err := net.ResolveTCPAddr("tcp", addrStr + ":0")
+		addr, err := net.ResolveTCPAddr("tcp", addrStr+":0")
 		if err != nil {
 			log.Fatal("set out going address error:", err)
 		}
