@@ -1,0 +1,17 @@
+[
+	{
+		"url": "http://google.com",
+		"name": "google",
+		"skip_redirect": true
+	},
+	{
+		"url": "http://facebook.com",
+		"name": "facebook",
+		"skip_redirect": true
+	},
+	{
+		"url": "http://cloudflare.com",
+		"name": "cloudflare",
+		"skip_redirect": true
+	}
+]
