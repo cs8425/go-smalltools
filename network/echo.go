@@ -9,19 +9,21 @@ import (
 	"sync"
 )
 
-var localAddr = flag.String("l", ":1082", "")
+var (
+	localAddr = flag.String("l", ":1082", "")
 
-// global recycle buffer
-var copyBuf sync.Pool
+	// global recycle buffer
+	copyBuf = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 4096)
+		},
+	}
+)
 
 func main() {
 	flag.Parse()
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
-
-	copyBuf.New = func() interface{} {
-		return make([]byte, 4096)
-	}
 
 	addr, err := net.ResolveTCPAddr("tcp", *localAddr)
 	if err != nil {

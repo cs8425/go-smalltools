@@ -13,16 +13,22 @@ import (
 	"time"
 )
 
-var verbosity = flag.Int("v", 3, "verbosity")
+var (
+	verbosity = flag.Int("v", 3, "verbosity")
 
-var localAddr = flag.String("l", ":9999", "bind addr")
-var socksAddr = flag.String("s", "example.com:1080", "socks5 server addr")
-var targetAddr = flag.String("t", "192.168.1.1:80", "target addr")
+	localAddr  = flag.String("l", ":9999", "bind addr")
+	socksAddr  = flag.String("s", "example.com:1080", "socks5 server addr")
+	targetAddr = flag.String("t", "192.168.1.1:80", "target addr")
 
-// global recycle buffer
-var copyBuf sync.Pool
+	// global recycle buffer
+	copyBuf = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 4096)
+		},
+	}
 
-var socksReq []byte
+	socksReq []byte
+)
 
 func handleConnection(p1 net.Conn) {
 	defer p1.Close()
@@ -93,10 +99,6 @@ func main() {
 	log.SetFlags(log.Ldate | log.Ltime)
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU() + 2)
-
-	copyBuf.New = func() interface{} {
-		return make([]byte, 4096)
-	}
 
 	host, portStr, err := net.SplitHostPort(*targetAddr)
 	if err != nil {

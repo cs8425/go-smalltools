@@ -16,18 +16,19 @@ import (
 var (
 	verbosity = 3
 	port      = flag.String("l", ":4040", "bind port")
-)
 
-// global recycle buffer
-var copyBuf sync.Pool
+	// global recycle buffer
+	copyBuf = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 16384)
+		},
+	}
+)
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	runtime.GOMAXPROCS(runtime.NumCPU() + 2)
-	copyBuf.New = func() interface{} {
-		return make([]byte, 16384)
-	}
 
 	listener, err := net.Listen("tcp", *port)
 	if err != nil {

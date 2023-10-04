@@ -19,14 +19,20 @@ import (
 	"strconv"
 )
 
-var verbosity = flag.Int("v", 3, "verbosity")
+var (
+	verbosity = flag.Int("v", 3, "verbosity")
 
-var localAddr = flag.String("l", ":7777", "bind addr")
-var socksAddr = flag.String("s", "example.com:1080", "socks5 server addr")
-var targetAddr = flag.String("t", "192.168.1.1:80", "target addr")
+	localAddr  = flag.String("l", ":7777", "bind addr")
+	socksAddr  = flag.String("s", "example.com:1080", "socks5 server addr")
+	targetAddr = flag.String("t", "192.168.1.1:80", "target addr")
 
-// global recycle buffer
-var copyBuf sync.Pool
+	// global recycle buffer
+	copyBuf = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 4096)
+		},
+	}
+)
 
 // thank's https://github.com/shadowsocks/go-shadowsocks2
 const (

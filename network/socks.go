@@ -24,10 +24,14 @@ var (
 	outIf     = flag.String("oif", "", "out going interface")
 
 	verbosity = flag.Int("v", 3, "verbosity")
-)
 
-// global recycle buffer
-var copyBuf sync.Pool
+	// global recycle buffer
+	copyBuf = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 4096)
+		},
+	}
+)
 
 func replyAndClose(p1 net.Conn, rpy int) {
 	p1.Write([]byte{0x05, byte(rpy), 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
@@ -118,10 +122,6 @@ func main() {
 	log.SetFlags(log.Ldate | log.Ltime)
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU() + 2)
-
-	copyBuf.New = func() interface{} {
-		return make([]byte, 16384)
-	}
 
 	listener, err := net.Listen("tcp", *localAddr)
 	if err != nil {

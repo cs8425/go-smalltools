@@ -1,10 +1,9 @@
 package main
 
 import (
+	"flag"
 	"io"
 	"log"
-	// "crypto/tls"
-	"flag"
 	"net"
 	"runtime"
 	"sync"
@@ -12,23 +11,25 @@ import (
 	"time"
 )
 
-var localAddr = flag.String("from", ":9999", "")
-var remoteAddr = flag.String("to", "127.0.0.1:80", "")
+var (
+	localAddr  = flag.String("from", ":9999", "")
+	remoteAddr = flag.String("to", "127.0.0.1:80", "")
 
-var RxSpd = flag.Int("rx", 1024*1024, "RX speed (byte/sec)")
-var TxSpd = flag.Int("tx", 1024*1024, "TX speed (byte/sec)")
+	RxSpd = flag.Int("rx", 1024*1024, "RX speed (byte/sec)")
+	TxSpd = flag.Int("tx", 1024*1024, "TX speed (byte/sec)")
 
-// global recycle buffer
-var copyBuf sync.Pool
+	// global recycle buffer
+	copyBuf = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 4096)
+		},
+	}
+)
 
 func main() {
 	flag.Parse()
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
-
-	copyBuf.New = func() interface{} {
-		return make([]byte, 4096)
-	}
 
 	/*cer, err := tls.LoadX509KeyPair("server.pem", "server.key")
 	if err != nil {
